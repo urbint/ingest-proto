@@ -11,5 +11,9 @@ func CSV(mapper interface{}) *CSVProcessor {
 
 // A CSVProcessor is a processor that handles reading CSV files
 type CSVProcessor struct {
-	ingest.Processor
+}
+
+// Run implements ingest.Runner for CSVProcessor
+func (c *CSVProcessor) Run(stage *ingest.Stage) error {
+	return nil
 }
