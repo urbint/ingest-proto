@@ -21,6 +21,15 @@ func NewOpener(path string) *Opener {
 	}
 }
 
+// Open is a shortcut to create a new Pipeline that starts with the
+// specified path or file.
+//
+// If the path is a directory, files can be selected from the directory using ingest.Select
+// If the path is a file, the file will be emitted to the next Processor
+func Open(path string) *Pipeline {
+	return NewPipeline().Then(NewOpener(path))
+}
+
 // Run implements Runner for Opener
 func (o *Opener) Run(stage *Stage) error {
 	if stage.Out == nil {

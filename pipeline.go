@@ -36,7 +36,15 @@ type HasDefaultOptions interface {
 // OnAdd is an interface which a Runner can implement
 // to allow it to hook in to being added to the pipeline
 type OnAdd interface {
+	Runner
 	OnAdd(prevRunner Runner)
+}
+
+// NoOpRunner allows a runner to specify that it shouldn't be added
+// to the run pipeline at add time
+type NoOpRunner interface {
+	Runner
+	NoOpRunner() bool
 }
 
 // NewPipeline instantiates a new pipeline for use
@@ -59,6 +67,19 @@ func (p *Pipeline) Then(runner Runner, opts ...ThenOpts) *Pipeline {
 		}
 	} else {
 		opt = opts[0]
+	}
+
+	if asOnAdd, hasOnAdd := runner.(OnAdd); hasOnAdd {
+		var prevRunner Runner
+		if len(p.configs) != 0 {
+			prevRunner = p.configs[len(p.configs)-1].Runner
+		}
+		asOnAdd.OnAdd(prevRunner)
+	}
+
+	// If it's a noop, skip adding it to the config / pipeline
+	if asNoOp, isNoOp := runner.(NoOpRunner); isNoOp && asNoOp.NoOpRunner() {
+		return p
 	}
 
 	p.configs = append(p.configs, runnerConfig{runner, opt})

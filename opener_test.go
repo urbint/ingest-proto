@@ -12,7 +12,7 @@ import (
 func TestOpener(t *testing.T) {
 	Convey("Opener", t, func() {
 		Convey("With a directory", func() {
-			opener := NewOpener("test/fixtures/")
+			opener := NewOpener("test/fixtures/dirtest")
 			out := make(chan interface{})
 
 			Convey("emits the directory contents", func() {
@@ -24,7 +24,7 @@ func TestOpener(t *testing.T) {
 					results = append(results, file)
 				}
 
-				So(results, ShouldHaveLength, 2)
+				So(results, ShouldHaveLength, 3)
 				So(<-err, ShouldBeNil)
 			})
 
