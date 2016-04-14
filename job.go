@@ -39,6 +39,17 @@ func (j *Job) Run() error {
 	return j.Error()
 }
 
+// RunAsync runs the job and returns an error channel that will emit the result
+// of the job and then be closed
+func (j *Job) RunAsync() <-chan error {
+	result := make(chan error)
+	go func() {
+		result <- j.Run()
+		close(result)
+	}()
+	return result
+}
+
 // Start starts the job but does not block
 //
 // It returns itself for a chainable API
