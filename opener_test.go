@@ -51,8 +51,9 @@ func TestOpener(t *testing.T) {
 				httpmock.DeactivateAndReset()
 			})
 
+			out := make(chan interface{})
+
 			Convey("emits an io.Reader", func() {
-				out := make(chan interface{})
 				opener := NewOpener("http://google.com")
 				errChan := NewPipeline().Then(opener).StreamTo(out).Build().RunAsync()
 				result := (<-out).(io.Reader)
@@ -61,6 +62,26 @@ func TestOpener(t *testing.T) {
 				So(string(buf), ShouldEqual, "Hello world")
 
 				So(<-errChan, ShouldBeNil)
+			})
+
+			Convey("with TempDir specified", func() {
+				opener := NewOpener("http://google.com", OpenOpts{TempDir: "test/tmp"})
+				errChan := NewPipeline().Then(opener).StreamTo(out).Build().RunAsync()
+
+				Convey("emits an os.File", func() {
+					rec := <-out
+
+					So(<-errChan, ShouldBeNil)
+					So(rec, ShouldHaveSameTypeAs, &os.File{})
+				})
+
+				Convey("removes TempDir on OnPipelineDone", func() {
+					err := opener.OnPipelineDone()
+					So(err, ShouldBeNil)
+
+					_, err = os.Stat("test/tmp")
+					So(os.IsNotExist(err), ShouldBeTrue)
+				})
 			})
 		})
 	})

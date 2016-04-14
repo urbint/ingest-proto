@@ -40,6 +40,13 @@ type OnAdd interface {
 	OnAdd(prevRunner Runner)
 }
 
+// OnDone is an interface which a Runner can implement
+// to allow it to run code after the pipeline has completed running fully
+type OnDone interface {
+	Runner
+	OnPipelineDone() error
+}
+
 // NoOpRunner allows a runner to specify that it shouldn't be added
 // to the run pipeline at add time
 type NoOpRunner interface {

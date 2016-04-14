@@ -59,7 +59,15 @@ func (j *Job) Start() *Job {
 	defer j.mu.Unlock()
 
 	j.wg = sync.WaitGroup{}
-	j.wg.Add(j.runnerCount)
+
+	stages := sync.WaitGroup{}
+	stages.Add(j.runnerCount)
+	j.wg.Add(2) // Add one for all runners finishing and one for cleanup
+
+	go func() {
+		stages.Wait()
+		j.wg.Done()
+	}()
 
 	var in chan interface{}
 	var out chan interface{}
@@ -74,11 +82,12 @@ func (j *Job) Start() *Job {
 			out = nil
 		}
 
+		// Start each worker
 		go func(i int, in chan interface{}, out chan interface{}) {
 			config := configs[i]
 
 			defer func() {
-				j.wg.Done()
+				stages.Done()
 				if out != nil {
 					close(out)
 				}
@@ -92,6 +101,18 @@ func (j *Job) Start() *Job {
 			j.handleError(err)
 		}(i, in, out)
 	}
+
+	// Wait for all stages to complete and run OnDone for the ones that define it
+	go func() {
+		stages.Wait()
+		defer j.wg.Done()
+		for _, config := range configs {
+			if asDone, hasDone := config.Runner.(OnDone); hasDone {
+				err := asDone.OnPipelineDone()
+				j.handleError(err)
+			}
+		}
+	}()
 
 	return j
 }
