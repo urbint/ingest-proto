@@ -88,7 +88,6 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 			return nil
 		case input, ok := <-stage.In:
 			if !ok {
-				stage.Done()
 				return nil
 			}
 			if ioReader, isIOReader := input.(io.Reader); isIOReader {
@@ -204,6 +203,11 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 // handleIOReader handles an io.Reader input
 func (c *CSVProcessor) handleIOReader(stage *ingest.Stage, input io.Reader) error {
 	reader := csv.NewReader(input)
+
+	if asCloser, isCloser := input.(io.Closer); isCloser {
+		defer asCloser.Close()
+	}
+
 	if !c.opts.SkipHeader {
 		header, err := reader.Read()
 		if err != nil {

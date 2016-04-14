@@ -63,6 +63,7 @@ func TestCSV(t *testing.T) {
 				var err error
 				go func() {
 					err = parser.Run(stage)
+					close(stage.Out)
 				}()
 
 				results := []Person{}

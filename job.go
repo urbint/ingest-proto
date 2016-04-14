@@ -61,29 +61,36 @@ func (j *Job) Start() *Job {
 	j.wg = sync.WaitGroup{}
 	j.wg.Add(j.runnerCount)
 
-	for i := range configs {
-		go func(i int) {
-			config := configs[i]
-			var prevRunner, nextRunner Runner
+	var in chan interface{}
+	var out chan interface{}
 
-			if i != 0 {
-				prevRunner = configs[i-1].Runner
-			}
-			if i != len(configs)-1 {
-				nextRunner = configs[i+1].Runner
-			}
-			defer j.wg.Done()
+	for i := range configs {
+		isLast := i == len(configs)-1
+
+		in = out
+		if !isLast {
+			out = make(chan interface{})
+		} else {
+			out = nil
+		}
+
+		go func(i int, in chan interface{}, out chan interface{}) {
+			config := configs[i]
+
+			defer func() {
+				j.wg.Done()
+				if out != nil {
+					close(out)
+				}
+			}()
+
 			err := config.Runner.Run(&Stage{
-				IsFirst:    i == 0,
-				IsLast:     i == len(configs)-1,
-				NextRunner: nextRunner,
-				PrevRunner: prevRunner,
-				In:         make(chan interface{}),
-				Out:        make(chan interface{}),
+				In:  in,
+				Out: out,
 			})
 
 			j.handleError(err)
-		}(i)
+		}(i, in, out)
 	}
 
 	return j

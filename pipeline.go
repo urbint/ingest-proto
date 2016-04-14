@@ -26,11 +26,17 @@ type Runner interface {
 	Run(*Stage) error
 }
 
-// HasDefaultOptions is an interface which a Runner can define
+// HasDefaultOptions is an interface which a Runner can implement
 // that allows it to specify default ThenOpts
 type HasDefaultOptions interface {
 	Runner
 	DefaultOpts() ThenOpts
+}
+
+// OnAdd is an interface which a Runner can implement
+// to allow it to hook in to being added to the pipeline
+type OnAdd interface {
+	OnAdd(prevRunner Runner)
 }
 
 // NewPipeline instantiates a new pipeline for use
@@ -58,6 +64,14 @@ func (p *Pipeline) Then(runner Runner, opts ...ThenOpts) *Pipeline {
 	p.configs = append(p.configs, runnerConfig{runner, opt})
 
 	return p
+}
+
+// StreamTo causes the pipeline emit records at that stage to the specified channel
+//
+// The records are not consumed by being streamed and will continue to pass through to the next
+// stage (if one exists)
+func (p *Pipeline) StreamTo(out chan interface{}) *Pipeline {
+	return p.Then(newPassthrough(out))
 }
 
 // Build builds the pipeline and returns a Job control structure
