@@ -78,7 +78,6 @@ func TestCSV(t *testing.T) {
 				})
 
 			})
-			Convey("Works with []string as In", nil)
 		})
 	})
 }
