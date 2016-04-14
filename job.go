@@ -68,9 +68,7 @@ func (j *Job) Start() *Job {
 				NextRunner: nextRunner,
 				PrevRunner: prevRunner,
 				In:         make(chan interface{}),
-
-				out: make(chan interface{}),
-				job: j,
+				Out:        make(chan interface{}),
 			})
 
 			j.handleError(err)

@@ -2,7 +2,6 @@ package utils
 
 import (
 	. "github.com/smartystreets/goconvey/convey"
-	// . "github.com/urbint/conveyer"
 
 	"testing"
 )
