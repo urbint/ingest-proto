@@ -33,7 +33,16 @@ func (o *Opener) Run(stage *Stage) error {
 	}
 
 	if osFile, isOSFile := file.(*os.File); isOSFile {
-		return o.emitDirectoryTo(osFile, stage.Out)
+		stat, err := osFile.Stat()
+		if err != nil {
+			return err
+		}
+		if stat.IsDir() {
+			return o.emitDirectoryTo(osFile, stage.Out)
+		}
+		stage.Out <- osFile
+	} else {
+		stage.Out <- file
 	}
 
 	return nil
