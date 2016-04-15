@@ -29,6 +29,10 @@ type OpenOpts struct {
 
 	// Logger is the logger that the Opener will log to
 	Logger Logger
+
+	// StreamProgressTo is used to specify a channel which will receive a count of bytes for files that are being downloaded
+	// Currently only works if TempDir is specified. Opening will NOT be blocked by this channel blocking
+	StreamProgressTo chan int64
 }
 
 // defaultOpenOpts sets sane defaults for OpenOpts
@@ -132,7 +136,10 @@ func (o *Opener) writeBufferToTemp(reader io.Reader, abort <-chan chan error) (*
 			outFile.Close()
 			return nil, nil
 		default:
-			if _, err := io.CopyN(outFile, reader, writeFileBlockSize); err != nil {
+			if byteCount, err := io.CopyN(outFile, reader, writeFileBlockSize); err != nil {
+				if o.Opts.StreamProgressTo != nil {
+					go func() { o.Opts.StreamProgressTo <- byteCount }()
+				}
 				if err == io.EOF {
 					return outFile, nil
 				}

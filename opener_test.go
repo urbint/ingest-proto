@@ -68,11 +68,25 @@ func TestOpener(t *testing.T) {
 				opener := NewOpener("http://google.com", OpenOpts{TempDir: "test/tmp"})
 				errChan := NewPipeline().Then(opener).StreamTo(out).Build().RunAsync()
 
-				FocusConvey("emits an os.File", func() {
+				Convey("emits an os.File", func() {
 					rec := <-out
 
 					So(<-errChan, ShouldBeNil)
 					So(rec, ShouldHaveSameTypeAs, &os.File{})
+				})
+
+				Convey("with StreamProgressTo set", func() {
+					out := make(chan interface{})
+					progress := make(chan int64)
+
+					opener := NewOpener("http://google.com", OpenOpts{TempDir: "test/tmp", StreamProgressTo: progress})
+					errChan := NewPipeline().Then(opener).StreamTo(out).Build().RunAsync()
+
+					<-out
+					So(<-errChan, ShouldBeNil)
+
+					bytes := <-progress
+					So(bytes, ShouldBeGreaterThan, 0)
 				})
 
 				Convey("removes TempDir on OnPipelineDone", func() {
