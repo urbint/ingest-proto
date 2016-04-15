@@ -19,6 +19,7 @@ func (p *passthrough) Run(stage *Stage) error {
 		select {
 		case errChan := <-stage.Abort:
 			errChan <- nil
+			return nil
 		case p.out <- rec:
 		}
 	}

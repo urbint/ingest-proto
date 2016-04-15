@@ -25,7 +25,7 @@ func NewJob(pipeline Pipeline) *Job {
 	return &Job{
 		pipeline:    &pipeline,
 		runnerCount: runnerCount,
-		abortChan:   make(chan chan error),
+		abortChan:   make(chan chan error, runnerCount),
 		mu:          sync.Mutex{},
 	}
 }
@@ -139,20 +139,20 @@ func (j *Job) Wait() error {
 //
 // It returns a channel of errors encountered while aborting
 func (j *Job) Abort() <-chan error {
-	errs := make(chan error, j.runnerCount)
+	shutdownErrs := make(chan error, j.runnerCount)
+	result := make(chan error)
+	for i := 0; i < j.runnerCount; i++ {
+		j.abortChan <- shutdownErrs
+	}
 	go func() {
-		wg := sync.WaitGroup{}
-		wg.Add(j.runnerCount)
 		for i := 0; i < j.runnerCount; i++ {
-			go func() {
-				j.abortChan <- errs
-				wg.Done()
-			}()
+			result <- <-shutdownErrs
 		}
-		wg.Wait()
-		close(errs)
+		close(shutdownErrs)
+		close(result)
 	}()
-	return errs
+
+	return result
 }
 
 // handleError handles an error if it exists.
