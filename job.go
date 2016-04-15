@@ -98,6 +98,10 @@ func (j *Job) Start() *Job {
 				Out: out,
 			})
 
+			if err != nil {
+				DefaultLogger.WithError(err).Error("Error while running pipeline")
+			}
+
 			j.handleError(err)
 		}(i, in, out)
 	}
@@ -147,5 +151,7 @@ func (j *Job) handleError(err error) {
 
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.err = err
+	if j.err == nil {
+		j.err = err
+	}
 }

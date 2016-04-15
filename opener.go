@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"github.com/alexflint/go-cloudfile"
+	"github.com/urbint/ingest/utils"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ const writeFileBlockSize = 1024
 // An Opener is a Runner that opens files
 type Opener struct {
 	Opts   OpenOpts
+	logger Logger
 	path   string
 	filter []*regexp.Regexp
 }
@@ -24,17 +26,31 @@ type OpenOpts struct {
 	// If TempDir is specified, remote files will be downloaded to a temporary directory in full before
 	// being being emitted to the next stage
 	TempDir string
+
+	// Logger is the logger that the Opener will log to
+	Logger Logger
+}
+
+// defaultOpenOpts sets sane defaults for OpenOpts
+func defaultOpenOpts() OpenOpts {
+	return OpenOpts{
+		Logger: DefaultLogger,
+	}
 }
 
 // NewOpener builds an Opener which will open the specified path
 func NewOpener(path string, opts ...OpenOpts) *Opener {
 	var opt OpenOpts
 	if len(opts) != 0 {
-		opt = opts[0]
+		opt = utils.Extend(defaultOpenOpts(), opts[0]).(OpenOpts)
+	} else {
+		opt = defaultOpenOpts()
 	}
+
 	return &Opener{
-		path: path,
-		Opts: opt,
+		logger: opt.Logger,
+		path:   path,
+		Opts:   opt,
 	}
 }
 
@@ -53,6 +69,9 @@ func (o *Opener) Run(stage *Stage) error {
 		return nil // Nothing to do here
 	}
 
+	log := o.logger.WithField("file", o.path)
+
+	log.Info("Opening file")
 	file, err := cloudfile.Open(o.path)
 	if err != nil {
 		return err
@@ -67,15 +86,18 @@ func (o *Opener) Run(stage *Stage) error {
 			return o.emitDirectoryTo(osFile, stage.Out)
 		}
 		stage.Out <- osFile
-	} else if o.Opts.TempDir == "" {
-		stage.Out <- file
 	} else {
-		file, err := o.writeBufferToTemp(file, stage.Abort)
-		if file != nil {
+		if o.Opts.TempDir == "" {
 			stage.Out <- file
-		}
-		if err != nil {
-			return err
+		} else {
+			file, err := o.writeBufferToTemp(file, stage.Abort)
+			if file != nil {
+				log.Info("Finished downloading file")
+				stage.Out <- file
+			}
+			if err != nil {
+				return err
+			}
 		}
 	}
 

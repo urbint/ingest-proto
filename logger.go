@@ -7,6 +7,7 @@ var DefaultLogger Logger = &EmptyLogger{}
 // Logger is a logging interface which mirrors pico.Logger, apex.Logger, and logrus.Logger
 type Logger interface {
 	WithError(err error) Logger
+	WithField(field string, value interface{}) Logger
 	Debug(args ...interface{})
 	Info(args ...interface{})
 	Warn(args ...interface{})
@@ -18,6 +19,9 @@ type EmptyLogger struct{}
 
 // WithError placeholder
 func (e *EmptyLogger) WithError(err error) Logger { return e }
+
+// WithField placeholder
+func (e *EmptyLogger) WithField(field string, value interface{}) Logger { return e }
 
 // Debug placeholder
 func (e *EmptyLogger) Debug(args ...interface{}) {}
