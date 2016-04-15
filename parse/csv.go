@@ -1,7 +1,9 @@
 package parse
 
 import (
+	"bytes"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -36,6 +38,9 @@ type (
 		// DateFormat is the format of Date strings used by the mapper to parse the dates
 		DateFormat string
 
+		// TrimSpaces determines whether spaces will be trimmed on fields
+		TrimSpaces bool
+
 		// FieldMap is a map of intergers representing the index of the column of the CSV row mapped
 		// to the index of the field. If not specified, it will be generated using the first
 		// row of the CSV mapped to struct tags of the mapper specified with "csv"
@@ -52,9 +57,18 @@ type (
 	}
 )
 
+// HasCSVOpts is an interface that a mapper can implement to set CSV options by default
+type HasCSVOpts interface {
+	CSVOpts() CSVOpts
+}
+
 // CSV returns an *ingest.Processor that will read a File
 func CSV(mapper interface{}, opts ...CSVOpts) *CSVProcessor {
 	opt := defaultCSVOpts()
+
+	if optionMaker, hasOpts := mapper.(HasCSVOpts); hasOpts {
+		utils.Extend(&opt, optionMaker.CSVOpts())
+	}
 
 	if len(opts) != 0 {
 		utils.Extend(&opt, opts[0])
@@ -96,6 +110,16 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 				if err := c.handleIOReader(stage, ioReader); err != nil {
 					return err
 				}
+			} else if str, isString := input.(string); isString {
+				if err := c.handleIOReader(stage, bytes.NewBufferString(str)); err != nil {
+					return err
+				}
+			} else if data, isBytes := input.([]byte); isBytes {
+				if err := c.handleIOReader(stage, bytes.NewBuffer(data)); err != nil {
+					return err
+				}
+			} else {
+				return errors.New("Unknown input to CSV Reader")
 			}
 		}
 	}
@@ -151,7 +175,11 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 		fieldInterface := field.Interface()
 		switch fieldInterface.(type) {
 		case string:
-			field.SetString(row[j])
+			if c.opts.TrimSpaces {
+				field.SetString(strings.TrimSpace(row[j]))
+			} else {
+				field.SetString(row[j])
+			}
 		case float32:
 			val, err := strconv.ParseFloat(row[j], 32)
 			if err != nil {
@@ -203,7 +231,7 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 }
 
 // SkipAbortErr saves us having to send nil errors back on abort
-func (c *CSVProcessor) SkipAbortErr() bool {
+func (o *CSVProcessor) SkipAbortErr() bool {
 	return true
 }
 
