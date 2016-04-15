@@ -6,6 +6,7 @@ type MockProcessor struct {
 	Opts          MockOpt
 	Started       bool
 	RunCalledWith *Stage
+	Aborted       bool
 }
 
 type MockOpt struct {
@@ -29,10 +30,23 @@ func NewMockProcessor(opts ...MockOpt) *MockProcessor {
 func (m *MockProcessor) Run(stage *Stage) error {
 	m.Started = true
 	m.RunCalledWith = stage
-	time.Sleep(m.Opts.Wait)
+	select {
+	case <-time.After(m.Opts.Wait):
+	case errChan := <-stage.Abort:
+		m.Aborted = true
+		errChan <- m.Opts.Err
+		return nil
+	}
 
 	for _, item := range m.Opts.Out {
-		stage.Send(item)
+		select {
+		case errChan := <-stage.Abort:
+			m.Aborted = true
+			errChan <- m.Opts.Err
+			return nil
+		default:
+			stage.Send(item)
+		}
 		time.Sleep(m.Opts.Wait)
 	}
 	return m.Opts.Err

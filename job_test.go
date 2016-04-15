@@ -42,5 +42,31 @@ func TestJob(t *testing.T) {
 				So(err, ShouldHaveMessage, "Mock Error")
 			})
 		})
+
+		Convey("Abort", func() {
+
+			Convey("Emits error channels to all running workers", func() {
+				processor := NewMockProcessor(MockOpt{Wait: time.Minute})
+				job := NewPipeline().Then(processor).Build().Start()
+				job.Abort()
+				time.Sleep(10 * time.Millisecond)
+				So(processor.Aborted, ShouldBeTrue)
+			})
+			Convey("Returns a channel of errors encountered while aborting", func() {
+				processor := NewMockProcessor(MockOpt{Wait: time.Minute, Err: errors.New("Mock error")})
+				job := NewPipeline().Then(processor).Build().Start()
+				errs := job.Abort()
+				time.Sleep(10 * time.Millisecond)
+
+				So(processor.Aborted, ShouldBeTrue)
+
+				errsEmitted := 0
+				for err := range errs {
+					errsEmitted++
+					So(err, ShouldHaveMessage, "Mock error")
+				}
+				So(errsEmitted, ShouldEqual, 1)
+			})
+		})
 	})
 }

@@ -11,9 +11,16 @@ func newPassthrough(out chan interface{}) *passthrough {
 
 // Run implements Runnable for the passthrough
 func (p *passthrough) Run(stage *Stage) error {
+	defer func() {
+		close(p.out)
+	}()
+
 	for rec := range stage.In {
-		p.out <- rec
+		select {
+		case errChan := <-stage.Abort:
+			errChan <- nil
+		case p.out <- rec:
+		}
 	}
-	close(p.out)
 	return nil
 }

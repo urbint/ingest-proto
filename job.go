@@ -10,7 +10,7 @@ type Job struct {
 
 	runnerCount int
 
-	abortChan chan chan<- error
+	abortChan chan chan error
 
 	err error
 	mu  sync.Mutex
@@ -25,7 +25,7 @@ func NewJob(pipeline Pipeline) *Job {
 	return &Job{
 		pipeline:    &pipeline,
 		runnerCount: runnerCount,
-		abortChan:   make(chan chan<- error, runnerCount),
+		abortChan:   make(chan chan error),
 		mu:          sync.Mutex{},
 	}
 }
@@ -94,8 +94,9 @@ func (j *Job) Start() *Job {
 			}()
 
 			err := config.Runner.Run(&Stage{
-				In:  in,
-				Out: out,
+				Abort: j.abortChan,
+				In:    in,
+				Out:   out,
 			})
 
 			if err != nil {
@@ -136,9 +137,22 @@ func (j *Job) Wait() error {
 
 // Abort aborts the job and cancels all running processors
 //
-// It returns any error encountered while aborting the job
-func (j *Job) Abort() error {
-	return nil
+// It returns a channel of errors encountered while aborting
+func (j *Job) Abort() <-chan error {
+	errs := make(chan error, j.runnerCount)
+	go func() {
+		wg := sync.WaitGroup{}
+		wg.Add(j.runnerCount)
+		for i := 0; i < j.runnerCount; i++ {
+			go func() {
+				j.abortChan <- errs
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+		close(errs)
+	}()
+	return errs
 }
 
 // handleError handles an error if it exists.
