@@ -75,7 +75,7 @@ func TestCSV(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(results, ShouldHaveLength, 4)
 				So(results, ShouldContainSomethingLike, Person{
-					ID: 3, Age: 17, Name: "James",
+					ID: 3, Age: 18, Name: "James",
 				})
 
 			})
