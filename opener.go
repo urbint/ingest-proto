@@ -61,6 +61,11 @@ func Open(path string, opts ...OpenOpts) *Pipeline {
 	return NewPipeline().Then(NewOpener(path, opts...))
 }
 
+// Name implements the Runner interface for the Opener
+func (o *Opener) Name() string {
+	return "Opener"
+}
+
 // Run implements Runner for Opener
 func (o *Opener) Run(stage *Stage) error {
 	if stage.Out == nil {
@@ -123,8 +128,7 @@ func (o *Opener) writeBufferToTemp(reader io.Reader, abort <-chan chan error) (*
 
 	for {
 		select {
-		case abortChan := <-abort:
-			abortChan <- nil
+		case <-abort:
 			outFile.Close()
 			return nil, nil
 		default:
@@ -155,6 +159,11 @@ func (o *Opener) OnPipelineDone() error {
 	}
 
 	return nil
+}
+
+// SkipAbortErr saves us having to send nil errors back on abort
+func (o *Opener) SkipAbortErr() bool {
+	return true
 }
 
 // emitDirectoryTo will recursively traverse a directory and emit all files (matching the filter, if any)

@@ -77,12 +77,16 @@ func defaultCSVOpts() CSVOpts {
 	}
 }
 
+// Name implements ingest.Runner for CSVProcessor
+func (c *CSVProcessor) Name() string {
+	return "CSV Reader"
+}
+
 // Run implements ingest.Runner for CSVProcessor
 func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 	for {
 		select {
-		case errChan := <-stage.Abort:
-			errChan <- nil
+		case <-stage.Abort:
 			return nil
 		case input, ok := <-stage.In:
 			if !ok {
@@ -198,6 +202,11 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 	return instance.Interface(), nil
 }
 
+// SkipAbortErr saves us having to send nil errors back on abort
+func (c *CSVProcessor) SkipAbortErr() bool {
+	return true
+}
+
 // handleIOReader handles an io.Reader input
 func (c *CSVProcessor) handleIOReader(stage *ingest.Stage, input io.Reader) error {
 	reader := csv.NewReader(input)
@@ -228,7 +237,11 @@ func (c *CSVProcessor) handleIOReader(stage *ingest.Stage, input io.Reader) erro
 			return err
 		case rec, ok := <-parsed:
 			if ok {
-				stage.Send(rec)
+				select {
+				case <-stage.Abort:
+					return nil
+				case stage.Out <- rec:
+				}
 			} else {
 				return nil
 			}

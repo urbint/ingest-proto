@@ -1,16 +1,20 @@
 package ingest
 
 import (
+	"fmt"
 	"sync"
+	"time"
 )
+
+// AbortTimeout is the duration after which aborting will be assumed as timed out. It will be logged as a warning
+var AbortTimeout = time.Second * 10
 
 // A Job is a control structure for interacting with a Pipeline
 type Job struct {
 	pipeline *Pipeline
 
 	runnerCount int
-
-	abortChan chan chan error
+	running     []*runState
 
 	err error
 	mu  sync.Mutex
@@ -25,9 +29,14 @@ func NewJob(pipeline Pipeline) *Job {
 	return &Job{
 		pipeline:    &pipeline,
 		runnerCount: runnerCount,
-		abortChan:   make(chan chan error, runnerCount),
+		running:     []*runState{},
 		mu:          sync.Mutex{},
 	}
+}
+
+type runState struct {
+	Runner    Runner
+	AbortChan chan chan error
 }
 
 // Run runs the Job and blocks until it has completed
@@ -67,6 +76,7 @@ func (j *Job) Start() *Job {
 	go func() {
 		stages.Wait()
 		j.wg.Done()
+		j.reset()
 	}()
 
 	var in chan interface{}
@@ -82,8 +92,10 @@ func (j *Job) Start() *Job {
 			out = nil
 		}
 
+		run := j.newRunState(configs[i].Runner)
+
 		// Start each worker
-		go func(i int, in chan interface{}, out chan interface{}) {
+		go func(i int, in chan interface{}, out chan interface{}, abort chan chan error) {
 			config := configs[i]
 
 			defer func() {
@@ -94,7 +106,7 @@ func (j *Job) Start() *Job {
 			}()
 
 			err := config.Runner.Run(&Stage{
-				Abort: j.abortChan,
+				Abort: abort,
 				In:    in,
 				Out:   out,
 			})
@@ -104,7 +116,7 @@ func (j *Job) Start() *Job {
 			}
 
 			j.handleError(err)
-		}(i, in, out)
+		}(i, in, out, run.AbortChan)
 	}
 
 	// Wait for all stages to complete and run OnDone for the ones that define it
@@ -139,19 +151,43 @@ func (j *Job) Wait() error {
 //
 // It returns a channel of errors encountered while aborting
 func (j *Job) Abort() <-chan error {
-	shutdownErrs := make(chan error, j.runnerCount)
-	result := make(chan error)
-	for i := 0; i < j.runnerCount; i++ {
-		j.abortChan <- shutdownErrs
-	}
+	result := make(chan error, j.runnerCount)
+	wg := sync.WaitGroup{}
+	wg.Add(j.runnerCount)
+
 	go func() {
-		for i := 0; i < j.runnerCount; i++ {
-			result <- <-shutdownErrs
-		}
-		close(shutdownErrs)
+		wg.Wait()
 		close(result)
 	}()
 
+	for i := 0; i < j.runnerCount; i++ {
+		go func(index int) {
+			defer wg.Done()
+
+			run := j.running[index]
+			abortDone := make(chan error)
+			defer DefaultLogger.Debug(fmt.Sprintf(`Aborted stage "%s"`, run.Runner.Name()))
+
+			select {
+			case <-time.After(AbortTimeout):
+				DefaultLogger.Warn(fmt.Sprintf(`Sending abort signal for stage "%s" timed out. It doesn't seem to be abortable`, run.Runner.Name()))
+				result <- fmt.Errorf("Stage %s timed out while sending abort", run.Runner.Name())
+			case run.AbortChan <- abortDone:
+				if asNoAbort, isNoErrAbortRunner := run.Runner.(NoErrAbortRunner); isNoErrAbortRunner && asNoAbort.SkipAbortErr() {
+					result <- nil
+					return
+				}
+
+				select {
+				case <-time.After(AbortTimeout):
+					DefaultLogger.Warn(fmt.Sprintf(`Aborting stage "%s" timed out`, run.Runner.Name()))
+					result <- fmt.Errorf("Stage %s timed out while aborting", run.Runner.Name())
+				case err := <-abortDone:
+					result <- err
+				}
+			}
+		}(i)
+	}
 	return result
 }
 
@@ -168,4 +204,19 @@ func (j *Job) handleError(err error) {
 	if j.err == nil {
 		j.err = err
 	}
+}
+
+// reset resets the jobs run states, etc.
+func (j *Job) reset() {
+	j.running = []*runState{}
+}
+
+// newRunState builds a *runState and appends it to j.runners
+func (j *Job) newRunState(runner Runner) *runState {
+	runState := &runState{
+		Runner:    runner,
+		AbortChan: make(chan chan error),
+	}
+	j.running = append(j.running, runState)
+	return runState
 }

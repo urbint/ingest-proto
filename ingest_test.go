@@ -27,6 +27,10 @@ func NewMockProcessor(opts ...MockOpt) *MockProcessor {
 	}
 }
 
+func (m *MockProcessor) Name() string {
+	return "Mock processor"
+}
+
 func (m *MockProcessor) Run(stage *Stage) error {
 	m.Started = true
 	m.RunCalledWith = stage
@@ -44,8 +48,7 @@ func (m *MockProcessor) Run(stage *Stage) error {
 			m.Aborted = true
 			errChan <- m.Opts.Err
 			return nil
-		default:
-			stage.Send(item)
+		case stage.Out <- item:
 		}
 		time.Sleep(m.Opts.Wait)
 	}

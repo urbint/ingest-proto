@@ -17,10 +17,3 @@ func NewStage() *Stage {
 		Abort: make(chan chan error),
 	}
 }
-
-// Send sends an item to the next stage, if there is one. Otherwise, it does nothing
-func (s *Stage) Send(item interface{}) {
-	if s.Out != nil {
-		s.Out <- item
-	}
-}

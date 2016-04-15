@@ -21,39 +21,6 @@ type ThenOpts struct {
 	OutBuffer int
 }
 
-// Runner is an interface which can be processed by a pipeline
-type Runner interface {
-	Run(*Stage) error
-}
-
-// HasDefaultOptions is an interface which a Runner can implement
-// that allows it to specify default ThenOpts
-type HasDefaultOptions interface {
-	Runner
-	DefaultOpts() ThenOpts
-}
-
-// OnAdd is an interface which a Runner can implement
-// to allow it to hook in to being added to the pipeline
-type OnAdd interface {
-	Runner
-	OnAdd(prevRunner Runner)
-}
-
-// OnDone is an interface which a Runner can implement
-// to allow it to run code after the pipeline has completed running fully
-type OnDone interface {
-	Runner
-	OnPipelineDone() error
-}
-
-// NoOpRunner allows a runner to specify that it shouldn't be added
-// to the run pipeline at add time
-type NoOpRunner interface {
-	Runner
-	NoOpRunner() bool
-}
-
 // NewPipeline instantiates a new pipeline for use
 func NewPipeline() *Pipeline {
 	return &Pipeline{}
@@ -94,12 +61,17 @@ func (p *Pipeline) Then(runner Runner, opts ...ThenOpts) *Pipeline {
 	return p
 }
 
-// StreamTo causes the pipeline emit records at that stage to the specified channel
+// StreamTo causes the pipeline emit records at that stage a channel passed as an argument
 //
-// The records are not consumed by being streamed and will continue to pass through to the next
-// stage (if one exists)
-func (p *Pipeline) StreamTo(out chan interface{}) *Pipeline {
-	return p.Then(newPassthrough(out))
+// An optional name can be specified as a string argument
+func (p *Pipeline) StreamTo(out chan interface{}, nameArg ...string) *Pipeline {
+	var name string
+	if len(nameArg) == 0 {
+		name = "Unknown"
+	} else {
+		name = nameArg[0]
+	}
+	return p.Then(newPassthrough(name, out))
 }
 
 // Build builds the pipeline and returns a Job control structure

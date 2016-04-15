@@ -21,12 +21,16 @@ func Unzip() *Unzipper {
 	return &Unzipper{}
 }
 
+// Name implements ingest.Runner for Unzipper
+func (u *Unzipper) Name() string {
+	return "Unzip"
+}
+
 // Run implements ingest.Runner for Unzipper
 func (u *Unzipper) Run(stage *ingest.Stage) error {
 	for {
 		select {
-		case abortChan := <-stage.Abort:
-			abortChan <- nil
+		case <-stage.Abort:
 			return nil
 		case in, ok := <-stage.In:
 			if !ok {
@@ -49,7 +53,11 @@ func (u *Unzipper) Run(stage *ingest.Stage) error {
 					if err != nil {
 						return err
 					}
-					stage.Send(osFile)
+					select {
+					case <-stage.Abort:
+						return nil
+					case stage.Out <- osFile:
+					}
 				}
 			}
 		}
@@ -77,6 +85,11 @@ func (u *Unzipper) SetSelection(selections ...string) {
 	for _, selection := range selections {
 		u.filter = append(u.filter, regexp.MustCompile(selection))
 	}
+}
+
+// SkipAbortErr saves us having to send nil errors back on abort
+func (u *Unzipper) SkipAbortErr() bool {
+	return true
 }
 
 func (u *Unzipper) filterMatch(name string) bool {

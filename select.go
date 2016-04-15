@@ -19,6 +19,11 @@ type Selector struct {
 	selection []string
 }
 
+// Name implements Runner for Selector
+func (s *Selector) Name() string {
+	return "Select"
+}
+
 // Run implements Runner for Selector
 func (s *Selector) Run(stage *Stage) error {
 	panic("Run should never be called on a selector Runner")
