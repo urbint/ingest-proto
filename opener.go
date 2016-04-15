@@ -40,11 +40,9 @@ func defaultOpenOpts() OpenOpts {
 
 // NewOpener builds an Opener which will open the specified path
 func NewOpener(path string, opts ...OpenOpts) *Opener {
-	var opt OpenOpts
+	var opt = defaultOpenOpts()
 	if len(opts) != 0 {
-		opt = utils.Extend(defaultOpenOpts(), opts[0]).(OpenOpts)
-	} else {
-		opt = defaultOpenOpts()
+		utils.Extend(&opt, opts[0])
 	}
 
 	return &Opener{

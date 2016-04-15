@@ -1,6 +1,8 @@
 package utils
 
-import "reflect"
+import (
+	"reflect"
+)
 
 // Extend copies non-zero values from src
 // to dest

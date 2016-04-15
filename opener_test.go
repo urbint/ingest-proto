@@ -68,7 +68,7 @@ func TestOpener(t *testing.T) {
 				opener := NewOpener("http://google.com", OpenOpts{TempDir: "test/tmp"})
 				errChan := NewPipeline().Then(opener).StreamTo(out).Build().RunAsync()
 
-				Convey("emits an os.File", func() {
+				FocusConvey("emits an os.File", func() {
 					rec := <-out
 
 					So(<-errChan, ShouldBeNil)

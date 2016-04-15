@@ -54,12 +54,10 @@ type (
 
 // CSV returns an *ingest.Processor that will read a File
 func CSV(mapper interface{}, opts ...CSVOpts) *CSVProcessor {
-	var opt CSVOpts
+	opt := defaultCSVOpts()
 
-	if len(opts) == 0 {
-		opt = defaultCSVOpts()
-	} else {
-		opt = utils.Extend(defaultCSVOpts(), opts[0]).(CSVOpts)
+	if len(opts) != 0 {
+		utils.Extend(&opt, opts[0])
 	}
 
 	return &CSVProcessor{
