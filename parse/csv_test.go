@@ -28,9 +28,10 @@ func TestCSV(t *testing.T) {
 		parser := CSV(Person{})
 
 		Convey("Parsing", func() {
-			parser.ParseHeader([]string{"user_id", "age", "favorite_color", "name", "city"})
-			Convey("Headers", func() {
+			headers := []string{"user_id", "age", "favorite_color", "name", "city"}
+			parser.ParseHeader(headers)
 
+			Convey("Headers", func() {
 				So(parser.fieldMap, ShouldResemble, map[int]int{
 					0: 0,
 					1: 2,
@@ -40,10 +41,22 @@ func TestCSV(t *testing.T) {
 				})
 			})
 
-			Convey("Rows", func() {
+			Convey("To Struct", func() {
 				res, err := parser.ParseRow([]string{"1", "38", "blue", "Steven", "New York"})
 				So(err, ShouldBeNil)
 				So(res, ShouldResemble, Person{
+					ID:   1,
+					Name: "Steven",
+					Age:  38,
+				})
+			})
+
+			Convey("To Pointer", func() {
+				parser := CSV(&Person{})
+				parser.ParseHeader(headers)
+				res, err := parser.ParseRow([]string{"1", "38", "blue", "Steven", "New York"})
+				So(err, ShouldBeNil)
+				So(res, ShouldResemble, &Person{
 					ID:   1,
 					Name: "Steven",
 					Age:  38,

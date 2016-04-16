@@ -26,7 +26,8 @@ type (
 
 		fieldMap map[int]int
 
-		opts *CSVOpts
+		opts    *CSVOpts
+		sendPtr bool
 	}
 
 	//CSVOpts are options used to configure a CSVProcessor
@@ -74,12 +75,15 @@ func CSV(mapper interface{}, opts ...CSVOpts) *CSVProcessor {
 		utils.Extend(&opt, opts[0])
 	}
 
-	return &CSVProcessor{
+	processor := &CSVProcessor{
 		mapper:   mapper,
-		logger:   opt.Logger,
+		sendPtr:  reflect.TypeOf(mapper).Kind() == reflect.Ptr,
 		fieldMap: opt.FieldMap,
 		opts:     &opt,
 	}
+	processor.logger = opt.Logger.WithField("processor", processor.Name())
+
+	return processor
 }
 
 // Default CSV  opts sets sane defaults for CSVOpts
@@ -98,6 +102,7 @@ func (c *CSVProcessor) Name() string {
 
 // Run implements ingest.Runner for CSVProcessor
 func (c *CSVProcessor) Run(stage *ingest.Stage) error {
+	log := c.logger
 	for {
 		select {
 		case <-stage.Abort:
@@ -107,14 +112,17 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 				return nil
 			}
 			if ioReader, isIOReader := input.(io.Reader); isIOReader {
+				log.Debug("Got an io reader")
 				if err := c.handleIOReader(stage, ioReader); err != nil {
 					return err
 				}
 			} else if str, isString := input.(string); isString {
+				log.Debug("Got a string")
 				if err := c.handleIOReader(stage, bytes.NewBufferString(str)); err != nil {
 					return err
 				}
 			} else if data, isBytes := input.([]byte); isBytes {
+				log.Debug("Got a byte")
 				if err := c.handleIOReader(stage, bytes.NewBuffer(data)); err != nil {
 					return err
 				}
@@ -128,6 +136,7 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 // ParseHeader builds a header map from a single row using
 // the struct tags specified from the Map
 func (c *CSVProcessor) ParseHeader(headers []string) {
+	c.logger.Debug("Parsed header")
 	targetType := reflect.Indirect(reflect.ValueOf(c.mapper)).Type()
 	numFields := targetType.NumField()
 	result := map[int]int{}
@@ -155,7 +164,7 @@ func (c *CSVProcessor) ParseHeader(headers []string) {
 // ParseRow parses a single row and returns a new instance of the
 // same type as the mapper.
 func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
-	instance := reflect.New(reflect.Indirect(reflect.ValueOf(c.mapper)).Type()).Elem()
+	instance := reflect.New(reflect.Indirect(reflect.ValueOf(c.mapper)).Type())
 
 	fieldMap := c.fieldMap
 
@@ -171,7 +180,7 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 		if fieldIndex == -1 || len(row[j]) == 0 {
 			continue
 		}
-		field := instance.Field(fieldMap[j])
+		field := instance.Elem().Field(fieldMap[j])
 		fieldInterface := field.Interface()
 		switch fieldInterface.(type) {
 		case string:
@@ -227,11 +236,16 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 		}
 	}
 
-	return instance.Interface(), nil
+	if c.sendPtr {
+		return instance.Interface(), nil
+	}
+
+	return instance.Elem().Interface(), nil
+
 }
 
 // SkipAbortErr saves us having to send nil errors back on abort
-func (o *CSVProcessor) SkipAbortErr() bool {
+func (c *CSVProcessor) SkipAbortErr() bool {
 	return true
 }
 
@@ -322,6 +336,8 @@ func (c *CSVProcessor) startDecoders(input chan []string, errChan chan error) (o
 					if err != nil && c.opts.AbortOnFailedRow {
 						errChan <- err
 						return
+					} else if err != nil {
+						continue
 					}
 					output <- rec
 				}
