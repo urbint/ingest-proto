@@ -20,6 +20,14 @@ type OnAdd interface {
 	OnAdd(prevRunner Runner)
 }
 
+// PassOnAddTarget is an interface which a Runner can implement
+// to cause OnAdd hooks that would target it to target the previous
+// targetable interface
+type PassOnAddTarget interface {
+	Runner
+	PassOnAddTarget() bool
+}
+
 // OnDone is an interface which a Runner can implement
 // to allow it to run code after the pipeline has completed running fully
 type OnDone interface {

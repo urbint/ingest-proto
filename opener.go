@@ -1,12 +1,13 @@
 package ingest
 
 import (
-	"github.com/alexflint/go-cloudfile"
-	"github.com/urbint/ingest/utils"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/alexflint/go-cloudfile"
+	"github.com/urbint/ingest/utils"
 )
 
 // writeFileBlockSize is the number of bytes copied to the temporary file buffer

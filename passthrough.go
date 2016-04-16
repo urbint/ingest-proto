@@ -2,12 +2,13 @@ package ingest
 
 // passthrough is an empty runner that will emit records to a channel
 type passthrough struct {
-	name string
-	out  chan interface{}
+	name    string
+	out     chan interface{}
+	noClose bool
 }
 
-func newPassthrough(name string, out chan interface{}) *passthrough {
-	return &passthrough{name, out}
+func newPassthrough(name string, out chan interface{}, noClose bool) *passthrough {
+	return &passthrough{name, out, noClose}
 }
 
 // Name implements the Runner interfacce for passthrough
@@ -18,7 +19,9 @@ func (p *passthrough) Name() string {
 // Run implements the Runner interface for passthrough
 func (p *passthrough) Run(stage *Stage) error {
 	defer func() {
-		close(p.out)
+		if !p.noClose {
+			close(p.out)
+		}
 	}()
 
 	for {
@@ -48,5 +51,10 @@ func (p *passthrough) Run(stage *Stage) error {
 
 // SkipAbortErr saves us having to send nil errors back on abort
 func (p *passthrough) SkipAbortErr() bool {
+	return true
+}
+
+// PassOnAddTarget makes it so that a passthrough stream is not targeted
+func (p *passthrough) PassOnAddTarget() bool {
 	return true
 }
