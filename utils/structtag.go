@@ -7,10 +7,19 @@ import (
 
 // MapFromStructTag builds a hash map using the string specified by tagName as the keys
 //
+// If dest is specified, it will be used as the map where the result is stored. Otherwise a new
+// map will be initialized and returned.
+//
 // Optionally omitempty may be added to the value to cause a zero value of the field to be
 // omitted from the map entirely
-func MapFromStructTag(src interface{}, tagName string) map[string]interface{} {
-	result := map[string]interface{}{}
+func MapFromStructTag(src interface{}, tagName string, dest ...map[string]interface{}) map[string]interface{} {
+	var result map[string]interface{}
+
+	if len(dest) == 0 {
+		result = map[string]interface{}{}
+	} else {
+		result = dest[0]
+	}
 
 	srcValue := reflect.ValueOf(src)
 	srcType := reflect.Indirect(srcValue).Type()
@@ -39,8 +48,12 @@ func MapFromStructTag(src interface{}, tagName string) map[string]interface{} {
 
 		if omitEmpty && reflect.DeepEqual(reflect.Zero(srcStructField.Type).Interface(), iFieldVal) {
 			continue
-		} else if reflect.Indirect(fieldVal).Type().Kind() == reflect.Struct {
-			result[outName] = MapFromStructTag(fieldVal.Interface(), tagName)
+		} else if srcStructField.Type.Kind() == reflect.Struct {
+			if srcStructField.Anonymous {
+				MapFromStructTag(fieldVal.Interface(), tagName, result)
+			} else {
+				result[outName] = MapFromStructTag(fieldVal.Interface(), tagName)
+			}
 		} else {
 			result[outName] = iFieldVal
 		}

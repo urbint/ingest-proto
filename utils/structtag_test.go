@@ -11,20 +11,31 @@ func TestMapFromStructTag(t *testing.T) {
 		Supported bool `mytag:"supported"`
 	}
 
+	type Anonymous struct {
+		BaseVal   string `mytag:"base"`
+		Overwrite bool   `mytag:"overwrite-me,omitempty"`
+	}
+
 	type MyStruct struct {
-		Num     int    `mytag:"yay"`
-		Empty   int    `mytag:"somethingelse,omitempty"`
-		Omit    string `mytag:"-"`
-		Default string
-		Nested  Nested
+		Anonymous
+		Overwrite bool   `mytag:"overwritten-me"`
+		Num       int    `mytag:"yay"`
+		Empty     int    `mytag:"somethingelse,omitempty"`
+		Omit      string `mytag:"-"`
+		Default   string
+		Nested    Nested
 	}
 
 	Convey("MapFromStructTag", t, func() {
 		Convey("Builds a map from the specified tag", func() {
 			vals := MapFromStructTag(&MyStruct{
-				Num:     1,
-				Omit:    "Hello",
-				Default: "Default",
+				Anonymous: Anonymous{
+					BaseVal: "Test",
+				},
+				Overwrite: true,
+				Num:       1,
+				Omit:      "Hello",
+				Default:   "Default",
 				Nested: Nested{
 					Supported: true,
 				},
@@ -44,12 +55,22 @@ func TestMapFromStructTag(t *testing.T) {
 			Convey("uses the fields name by default", func() {
 				So(vals["Default"], ShouldEqual, "Default")
 			})
-			Convey("supports nested and structs", func() {
+
+			Convey("supports nested structs", func() {
 				So(vals["Nested"], ShouldNotBeNil)
 
 				nestedMap := vals["Nested"].(map[string]interface{})
 
 				So(nestedMap["supported"], ShouldBeTrue)
+			})
+
+			Convey("puts anonymous structs on the top level", func() {
+				So(vals["Anonymous"], ShouldBeNil)
+				So(vals["base"], ShouldEqual, "Test")
+
+				So(vals["overwritten-me"], ShouldBeTrue)
+				_, hadOverwrite := vals["overwrite-me"]
+				So(hadOverwrite, ShouldBeFalse)
 			})
 		})
 	})
