@@ -1,9 +1,7 @@
 package parse
 
 import (
-	"bytes"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -103,7 +101,6 @@ func (c *CSVProcessor) Name() string {
 
 // Run implements ingest.Runner for CSVProcessor
 func (c *CSVProcessor) Run(stage *ingest.Stage) error {
-	log := c.logger
 	for {
 		select {
 		case <-stage.Abort:
@@ -112,24 +109,12 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 			if !ok {
 				return nil
 			}
-			if ioReader, isIOReader := input.(io.Reader); isIOReader {
-				log.Debug("Got an io reader")
-				if err := c.handleIOReader(stage, ioReader); err != nil {
-					return err
-				}
-			} else if str, isString := input.(string); isString {
-				log.Debug("Got a string")
-				if err := c.handleIOReader(stage, bytes.NewBufferString(str)); err != nil {
-					return err
-				}
-			} else if data, isBytes := input.([]byte); isBytes {
-				log.Debug("Got a byte")
-				if err := c.handleIOReader(stage, bytes.NewBuffer(data)); err != nil {
-					return err
-				}
-			} else {
-				return errors.New("Unknown input to CSV Reader")
+
+			asRC, err := utils.ToIOReadCloser(input)
+			if err != nil {
+				return err
 			}
+			c.handleIO(stage, asRC)
 		}
 	}
 }
@@ -244,12 +229,9 @@ func (c *CSVProcessor) SkipAbortErr() bool {
 }
 
 // handleIOReader handles an io.Reader input
-func (c *CSVProcessor) handleIOReader(stage *ingest.Stage, input io.Reader) error {
+func (c *CSVProcessor) handleIO(stage *ingest.Stage, input io.ReadCloser) error {
 	reader := csv.NewReader(input)
-
-	if asCloser, isCloser := input.(io.Closer); isCloser {
-		defer asCloser.Close()
-	}
+	defer input.Close()
 
 	if !c.opts.SkipHeader {
 		header, err := reader.Read()
