@@ -24,7 +24,7 @@ type (
 
 		logger ingest.Logger
 
-		fieldMap map[int]int
+		fieldMap map[int][]int
 
 		opts    *CSVOpts
 		sendPtr bool
@@ -43,9 +43,10 @@ type (
 		TrimSpaces bool
 
 		// FieldMap is a map of intergers representing the index of the column of the CSV row mapped
-		// to the index of the field. If not specified, it will be generated using the first
-		// row of the CSV mapped to struct tags of the mapper specified with "csv"
-		FieldMap map[int]int
+		// to the indicies of the field. On the struct(s if embedded).
+		// If not specified, it will be generated using the first
+		// row of the CSV mapped to struct tags of the mapper specified with "csv".
+		FieldMap map[int][]int
 
 		// SkipHeader determines whether a Header should be skipped
 		SkipHeader bool
@@ -137,25 +138,13 @@ func (c *CSVProcessor) Run(stage *ingest.Stage) error {
 // the struct tags specified from the Map
 func (c *CSVProcessor) ParseHeader(headers []string) {
 	c.logger.Debug("Parsed header")
-	targetType := reflect.Indirect(reflect.ValueOf(c.mapper)).Type()
-	numFields := targetType.NumField()
-	result := map[int]int{}
 
+	targetType := reflect.Indirect(reflect.ValueOf(c.mapper)).Type()
+	result := map[int][]int{}
 	for column := 0; column < len(headers); column++ {
-		fieldFound := false
 		header := strings.TrimSpace(headers[column])
-		for j := 0; j < numFields; j++ {
-			field := targetType.Field(j)
-			csvName := field.Tag.Get("csv")
-			if csvName == header {
-				result[column] = j
-				fieldFound = true
-				break
-			}
-		}
-		if !fieldFound {
-			result[column] = -1
-		}
+		findResult, _ := findFieldInStruct(header, targetType)
+		result[column] = findResult
 	}
 
 	c.fieldMap = result
@@ -173,14 +162,19 @@ func (c *CSVProcessor) ParseRow(row []string) (interface{}, error) {
 	}
 
 	for j := 0; j < len(row); j++ {
-		fieldIndex := fieldMap[j]
+		fieldIndicies := fieldMap[j]
 
 		// If the length of the string is 0, or we don't have a mapping
 		// keep the "nil" version of the struct field
-		if fieldIndex == -1 || len(row[j]) == 0 {
+		if len(fieldIndicies) == 0 || len(row[j]) == 0 {
 			continue
 		}
-		field := instance.Elem().Field(fieldMap[j])
+
+		field := instance.Elem()
+		for _, fieldIndex := range fieldIndicies {
+			field = field.Field(fieldIndex)
+		}
+
 		fieldInterface := field.Interface()
 		switch fieldInterface.(type) {
 		case string:
@@ -348,4 +342,34 @@ func (c *CSVProcessor) startDecoders(input chan []string, errChan chan error) (o
 	}()
 
 	return output
+}
+
+func findFieldInStruct(fieldName string, target reflect.Type) (result []int, found bool) {
+	numFields := target.NumField()
+	for i := 0; i < numFields; i++ {
+		field := target.Field(i)
+		kind := field.Type.Kind()
+
+		isEmbeddedStruct := kind == reflect.Struct || (kind == reflect.Ptr && field.Type.Elem().Kind() == reflect.Struct)
+
+		if isEmbeddedStruct {
+			var nestedTarget reflect.Type
+			if kind == reflect.Struct {
+				nestedTarget = field.Type
+			} else {
+				nestedTarget = field.Type.Elem()
+			}
+			nestedIndexes, found := findFieldInStruct(fieldName, nestedTarget)
+			if found {
+				result := append([]int{i}, nestedIndexes...)
+				return result, true
+			}
+		} else {
+			csvName := field.Tag.Get("csv")
+			if csvName == fieldName {
+				return []int{i}, true
+			}
+		}
+	}
+	return []int{}, false
 }

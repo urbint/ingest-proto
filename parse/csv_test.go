@@ -17,10 +17,14 @@ func TestCSV(t *testing.T) {
 3,18,Blue,James,New York
 4,22,Purple,Alice,Boston`
 
+	type Base struct {
+		Age int `csv:"age"`
+	}
+
 	type Person struct {
+		Base
 		ID     int    `csv:"user_id"`
 		Name   string `csv:"name"`
-		Age    int    `csv:"age"`
 		HasPet bool
 	}
 
@@ -32,12 +36,12 @@ func TestCSV(t *testing.T) {
 			parser.ParseHeader(headers)
 
 			Convey("Headers", func() {
-				So(parser.fieldMap, ShouldResemble, map[int]int{
-					0: 0,
-					1: 2,
-					2: -1,
-					3: 1,
-					4: -1,
+				So(parser.fieldMap, ShouldResemble, map[int][]int{
+					0: {1},
+					1: {0, 0},
+					2: {},
+					3: {2},
+					4: {},
 				})
 			})
 
@@ -47,7 +51,7 @@ func TestCSV(t *testing.T) {
 				So(res, ShouldResemble, Person{
 					ID:   1,
 					Name: "Steven",
-					Age:  38,
+					Base: Base{Age: 38},
 				})
 			})
 
@@ -59,7 +63,7 @@ func TestCSV(t *testing.T) {
 				So(res, ShouldResemble, &Person{
 					ID:   1,
 					Name: "Steven",
-					Age:  38,
+					Base: Base{Age: 38},
 				})
 			})
 		})
@@ -88,7 +92,7 @@ func TestCSV(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(results, ShouldHaveLength, 4)
 				So(results, ShouldContainSomethingLike, Person{
-					ID: 3, Age: 18, Name: "James",
+					ID: 3, Base: Base{Age: 18}, Name: "James",
 				})
 
 			})
