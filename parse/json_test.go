@@ -2,7 +2,6 @@ package parse
 
 import (
 	"bytes"
-	"fmt"
 	. "github.com/smartystreets/goconvey/convey"
 	. "github.com/urbint/conveyer"
 	"github.com/urbint/ingest"
@@ -46,7 +45,6 @@ func TestJSON(t *testing.T) {
 			results := []Person{}
 
 			for res := range stage.Out {
-				fmt.Printf("Got record: %+v\n", res)
 				results = append(results, res.(Person))
 			}
 
@@ -59,17 +57,35 @@ func TestJSON(t *testing.T) {
 
 		Convey("navigating to a selection", func() {
 			sampleJSON := `{"id":1,"nested":{"deeply":[1, 2, 3, 4]}}`
-			parser := JSON([]int{}, JSONOpts{Selector: "nested.deeply"})
 
-			rc := ioutil.NopCloser(bytes.NewBufferString(sampleJSON))
-			go parser.handleIO(rc)
+			Convey("works when selecting an entire array", func() {
+				parser := JSON([]int{}, JSONOpts{Selector: "nested.deeply"})
 
-			select {
-			case err := <-parser.workerErr:
-				So(err, ShouldBeNil)
-			case rec := <-parser.workerOut:
-				So(rec, ShouldResemble, []int{1, 2, 3, 4})
-			}
+				rc := ioutil.NopCloser(bytes.NewBufferString(sampleJSON))
+				go parser.handleIO(rc)
+
+				select {
+				case err := <-parser.workerErr:
+					So(err, ShouldBeNil)
+				case rec := <-parser.workerOut:
+					So(rec, ShouldResemble, []int{1, 2, 3, 4})
+				}
+			})
+
+			Convey("works when iterating an array", func() {
+				var result int
+
+				parser := JSON(result, JSONOpts{Selector: "nested.deeply.*"})
+				rc := ioutil.NopCloser(bytes.NewBufferString(sampleJSON))
+				go parser.handleIO(rc)
+
+				select {
+				case err := <-parser.workerErr:
+					So(err, ShouldBeNil)
+				case rec := <-parser.workerOut:
+					So(rec, ShouldEqual, 1)
+				}
+			})
 
 		})
 	})

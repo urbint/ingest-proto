@@ -65,6 +65,11 @@ func defaultJSONOpts() JSONOpts {
 	}
 }
 
+// Name implements ingest.Runner for JSONProcessor
+func (j *JSONProcessor) Name() string {
+	return "JSON"
+}
+
 // Run implements ingest.Runner for JSONProcessor
 func (j *JSONProcessor) Run(stage *ingest.Stage) error {
 	j.workerQuit = make(chan bool)
@@ -128,8 +133,10 @@ func (j *JSONProcessor) handleIO(rc io.ReadCloser) {
 			case <-j.workerQuit:
 				return
 			default:
-				// rec := j.newInstance()
-				rec := reflect.New(reflect.Indirect(reflect.ValueOf(j.mapper)).Type())
+				if !decoder.More() {
+					return
+				}
+				rec := j.newInstance()
 				if err := decoder.Decode(rec.Interface()); err != nil {
 					if err == io.EOF {
 						return
@@ -157,6 +164,11 @@ func (j *JSONProcessor) navigateToSelection(decoder *json.Decoder) error {
 		if token == nestIn[0] {
 			nestIn = nestIn[1:]
 			continue
+		} else if nestIn[0] == "*" {
+			if delimVal, isDelim := token.(json.Delim); isDelim && json.Delim('[') == delimVal {
+				nestIn = nestIn[1:]
+			}
+			continue
 		}
 	}
 	return nil
@@ -165,4 +177,11 @@ func (j *JSONProcessor) navigateToSelection(decoder *json.Decoder) error {
 // SkipAbortErr saves us having to send nil errors back on abort
 func (j *JSONProcessor) SkipAbortErr() bool {
 	return true
+}
+
+// SetSelection implements ingest.Selectable for JSONProcessor
+func (j *JSONProcessor) SetSelection(selection ...string) {
+	if len(selection) > 0 {
+		j.opts.Selector = selection[0]
+	}
 }
