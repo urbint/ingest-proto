@@ -12,13 +12,16 @@ import (
 // Unzipper is a Runner that will unzip a file
 type Unzipper struct {
 	filter []*regexp.Regexp
+	logger ingest.Logger
 }
 
 // Unzip receives an os.File and will Unzip it, emitting the files within
 //
 // It is selectable, allowing you to use a Regex to filter said files
 func Unzip() *Unzipper {
-	return &Unzipper{}
+	return &Unzipper{
+		logger: ingest.DefaultLogger.WithField("processor", "unzip"),
+	}
 }
 
 // Name implements ingest.Runner for Unzipper
@@ -28,6 +31,7 @@ func (u *Unzipper) Name() string {
 
 // Run implements ingest.Runner for Unzipper
 func (u *Unzipper) Run(stage *ingest.Stage) error {
+	log := u.logger
 	for {
 		select {
 		case <-stage.Abort:
@@ -42,6 +46,7 @@ func (u *Unzipper) Run(stage *ingest.Stage) error {
 			}
 			file.Close() // we don't need it open anymore, we are going to re-open it as a zip
 
+			log.WithField("file", file.Name()).Debug("opening")
 			archive, err := zip.OpenReader(file.Name())
 			if err != nil {
 				return err
@@ -49,6 +54,7 @@ func (u *Unzipper) Run(stage *ingest.Stage) error {
 
 			for _, innerFile := range archive.File {
 				if u.filterMatch(innerFile.FileHeader.Name) {
+					log.WithField("file", innerFile.FileHeader.Name).Debug("found match")
 					osFile, err := innerFile.Open()
 					if err != nil {
 						return err

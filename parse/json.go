@@ -30,9 +30,10 @@ type (
 
 	// JSONOpts are options used to configre a JSONProcessor (and an FFJSONProcessor)
 	JSONOpts struct {
-		Selector    string
-		NumDecoders int
-		Logger      ingest.Logger
+		AbortOnFailedObject bool
+		Selector            string
+		NumDecoders         int
+		Logger              ingest.Logger
 	}
 )
 
@@ -89,7 +90,14 @@ func (j *JSONProcessor) Run(stage *ingest.Stage) error {
 			}
 			stage.Out <- data
 		case err := <-j.workerErr:
-			return err
+			if j.opts.AbortOnFailedObject {
+				return err
+			}
+			log := j.logger.WithError(err)
+			if asUnmarshalTypeErr, isUnmarshalTypeErr := err.(*json.UnmarshalTypeError); isUnmarshalTypeErr {
+				log = log.WithField("offset", asUnmarshalTypeErr.Offset).WithField("value", asUnmarshalTypeErr.Value)
+			}
+			log.Warn("Error unmarshalling JSON record")
 		case input, ok := <-in:
 			if !ok {
 				// Set input to nil to not go in here any more, then wait for all the workers
@@ -105,7 +113,7 @@ func (j *JSONProcessor) Run(stage *ingest.Stage) error {
 			if err != nil {
 				return err
 			}
-			j.handleIO(rc)
+			go j.handleIO(rc)
 		}
 	}
 }
@@ -142,12 +150,21 @@ func (j *JSONProcessor) handleIO(rc io.ReadCloser) {
 						return
 					}
 					j.workerErr <- err
+					continue
 				}
 
+				var toSend interface{}
+
 				if j.sendPtr {
-					j.workerOut <- rec.Interface()
+					toSend = rec.Interface()
 				} else {
-					j.workerOut <- rec.Elem().Interface()
+					toSend = rec.Elem().Interface()
+				}
+
+				select {
+				case <-j.workerQuit:
+					return
+				case j.workerOut <- toSend:
 				}
 			}
 		}
